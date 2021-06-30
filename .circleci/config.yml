@@ -5,23 +5,6 @@ version: 2.1
 #   ruby: circleci/ruby@1.1.2
 
 commands:
-  pip-install-deps-27:
-    parameters:
-      requirements:
-        default: "tests/requirements-27.txt"
-        type: string
-    steps:
-      - run:
-          name: Install Python 2.7 Dependencies
-          command: |
-            rm -rf venv
-            export PATH=/home/circleci/.local/bin:$PATH
-            pip install --user -U pip setuptools virtualenv wheel
-            virtualenv --python=python2.7 --always-copy venv
-            . venv/bin/activate
-            pip install 'wheel>=0.29.0'
-            pip install -r requirements.txt
-            pip install -r <<parameters.requirements>>
 
   pip-install-deps:
     parameters:
