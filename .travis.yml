@@ -1,0 +1,19 @@
+dist: bionic
+language: python
+python:
+  # We don't actually use the Travis Python, but this keeps it organized.
+  - "3.8"
+
+install:
+  - python3.8 -m venv venv38 && source venv38/bin/activate
+  - python3 -m pip install --upgrade pip
+  - pip install 'wheel>=0.29.0'
+  - pip install -r requirements.txt
+  - pip install -r tests/requirements.txt
+  - python setup.py install
+
+  #- sudo apt-get update
+
+script:
+  - pip uninstall -y uvloop
+  - pytest -v
