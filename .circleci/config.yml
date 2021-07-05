@@ -4,7 +4,74 @@ version: 2.1
 # orbs:
 #   ruby: circleci/ruby@1.1.2
 
-
+commands:
+  pip-install-deps-27:
+    parameters:
+      requirements:
+        default: "tests/requirements-27.txt"
+        type: string
+    steps:
+      - run:
+          name: Install Python 2.7 Dependencies
+          command: |
+            rm -rf venv
+            export PATH=/home/circleci/.local/bin:$PATH
+            pip install --user -U pip setuptools virtualenv wheel
+            virtualenv --python=python2.7 --always-copy venv
+            . venv/bin/activate
+            pip install 'wheel>=0.29.0'
+            pip install -r requirements.txt
+            pip install -r <<parameters.requirements>>
+  pip-install-deps:
+    parameters:
+      requirements:
+        default: "tests/requirements.txt"
+        type: string
+    steps:
+      - run:
+          name: Install Python Dependencies
+          command: |
+            python -m venv venv
+            . venv/bin/activate
+            pip install --upgrade pip
+            pip install 'wheel>=0.29.0'
+            pip install -r requirements.txt
+            pip install -r <<parameters.requirements>>
+  install-couchbase-deps:
+    steps:
+      - run:
+          name: Install Couchbase Dependencies
+          command: |
+            sudo apt-get update
+            sudo apt install lsb-release -y
+            curl -O https://packages.couchbase.com/releases/couchbase-release/couchbase-release-1.0-6-amd64.deb
+            sudo dpkg -i ./couchbase-release-1.0-6-amd64.deb
+            sudo apt-get update
+            sudo apt install libcouchbase-dev -y
+jobs:
+  python27:
+    docker:
+      - image: circleci/python:2.7.16-stretch
+      - image: circleci/postgres:9.6.5-alpine-ram
+      - image: circleci/mariadb:10.1-ram
+      - image: circleci/redis:5.0.4
+      - image: rabbitmq:3.5.4
+      - image: circleci/mongo:4.2.3-ram
+      - image: singularities/pubsub-emulator
+        environment:
+          PUBSUB_PROJECT_ID: "project-test"
+          PUBSUB_LISTEN_ADDRESS: "0.0.0.0:8432"
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - pip-install-deps-27
+      - run:
+          name: run tests
+          environment:
+            INSTANA_TEST: "true"
+          command: |
+            . venv/bin/activate
+            pytest -v
   python37:
     docker:
       - image: circleci/python:3.7.9
@@ -30,7 +97,6 @@ version: 2.1
             # We uninstall uvloop as it interferes with asyncio changing the event loop policy
             pip uninstall -y uvloop
             pytest -v
-
   python38:
     docker:
       - image: circleci/python:3.8.6
@@ -59,9 +125,130 @@ version: 2.1
       - store_artifacts:
           path: htmlcov
 
+  python39:
+    docker:
+      - image: circleci/python:3.9.0-buster
+      - image: circleci/postgres:9.6.5-alpine-ram
+      - image: circleci/mariadb:10-ram
+      - image: circleci/redis:5.0.4
+      - image: rabbitmq:3.5.4
+      - image: circleci/mongo:4.2.3-ram
+      - image: singularities/pubsub-emulator
+        environment:
+          PUBSUB_PROJECT_ID: "project-test"
+          PUBSUB_LISTEN_ADDRESS: "0.0.0.0:8432"
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - pip-install-deps
+      - run:
+          name: run tests
+          environment:
+            INSTANA_TEST: "true"
+          command: |
+            . venv/bin/activate
+            pytest -v
+  py38couchbase:
+    docker:
+      - image: circleci/python:3.7.8-stretch
+      - image: couchbase/server-sandbox:5.5.0
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - install-couchbase-deps
+      - pip-install-deps:
+          requirements: "tests/requirements-couchbase.txt"
+      - run:
+          name: run tests
+          environment:
+            INSTANA_TEST: "true"
+            COUCHBASE_TEST: "true"
+          command: |
+            . venv/bin/activate
+            pytest -v tests/clients/test_couchbase.py
+  py27couchbase:
+    docker:
+      - image: circleci/python:2.7.16-stretch
+      - image: couchbase/server-sandbox:5.5.0
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - install-couchbase-deps
+      - pip-install-deps-27:
+          requirements: "tests/requirements-couchbase.txt"
+      - run:
+          name: run tests
+          environment:
+            INSTANA_TEST: "true"
+            COUCHBASE_TEST: "true"
+          command: |
+            . venv/bin/activate
+            pytest -v tests/clients/test_couchbase.py
+  py27cassandra:
+    docker:
+      - image: circleci/python:2.7.16-stretch
+      - image: circleci/cassandra:3.10
+        environment:
+          MAX_HEAP_SIZE: 2048m
+          HEAP_NEWSIZE: 512m
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - install-couchbase-deps
+      - pip-install-deps-27:
+          requirements: "tests/requirements-cassandra.txt"
+      - run:
+          name: run tests
+          environment:
+            INSTANA_TEST: "true"
+            CASSANDRA_TEST: "true"
+          command: |
+            . venv/bin/activate
+            pytest -v tests/clients/test_cassandra-driver.py
+  py36cassandra:
+    docker:
+      - image: circleci/python:3.6.11
+      - image: circleci/cassandra:3.10
+        environment:
+          MAX_HEAP_SIZE: 2048m
+          HEAP_NEWSIZE: 512m
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - pip-install-deps:
+          requirements: "tests/requirements-cassandra.txt"
+      - run:
+          name: run tests
+          environment:
+            INSTANA_TEST: "true"
+            CASSANDRA_TEST: "true"
+          command: |
+            . venv/bin/activate
+            pytest -v tests/clients/test_cassandra-driver.py
+  gevent38:
+    docker:
+      - image: circleci/python:3.8.5
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - pip-install-deps:
+          requirements: "tests/requirements-gevent.txt"
+      - run:
+          name: run tests
+          environment:
+            INSTANA_TEST: "true"
+            GEVENT_TEST: "true"
+          command: |
+            . venv/bin/activate
+            pytest -v tests/frameworks/test_gevent.py
 workflows:
   version: 2
   build:
     jobs:
+      - python27
       - python37
       - python38
+      - python39
+      - py27cassandra
+      - py36cassandra
+      - gevent38
